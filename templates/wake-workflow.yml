@@ -1,0 +1,64 @@
+name: Wake studio
+
+on:
+  schedule:
+    # Two fires make the schedule DST-proof: one fire is always ~07:35 local (Europe/Copenhagen).
+    # The script no-ops if the studio is already running.
+    - cron: '35 5 * * *'   # 07:35 Danish while CEST (until late Oct)
+    - cron: '35 6 * * *'   # 07:35 Danish while CET (from late Oct)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # needed by the monthly heartbeat commit only
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install lightning-sdk (PINNED - newer versions changed the API)
+        run: pip install -q lightning-sdk==2026.10.13
+
+      - name: Wake the studio (no-op if already running)
+        env:
+          LIGHTNING_API_KEY: ${{ secrets.LIGHTNING_API_KEY }}
+        run: |
+          python - <<'PY'
+          import sys
+          from lightning_sdk import Studio, Status
+
+          s = Studio(
+              name="YOUR-STUDIO-NAME",            # e.g. "my-devbox"
+              org="YOUR-ORG",                     # first segment of your lightning.ai studio URL
+              teamspace="YOUR-TEAMSPACE",         # discover from inside: see README
+              create_ok=False,                    # typo => error, never silently create a studio
+          )
+          st = s.status
+          print("studio status:", st)
+          if st == Status.Running:
+              print("already running - nothing to do")
+              sys.exit(0)
+          if st != Status.Stopped:
+              print(f"unexpected status {st} - not touching it")
+              sys.exit(0)
+          s.start(machine="YOUR-FREE-MACHINE")    # discover from inside - NEVER leave the paid default
+          print("start issued - waking up")
+          PY
+
+      - name: Monthly heartbeat (stops GitHub disabling the schedule after 60 quiet days)
+        if: github.event.schedule == '35 5 * * *'
+        run: |
+          if [ "$(date -u +%d)" = "01" ]; then
+            git config --global user.email "actions@users.noreply.github.com"
+            git config --global user.name "heartbeat"
+            git clone -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" repo
+            cd repo
+            date -u > .heartbeat
+            git add .heartbeat
+            git diff --cached --quiet || git commit -qm "heartbeat $(date -u +%F)"
+            git push -q
+          fi

@@ -1,0 +1,9 @@
+[Unit]
+Description=Fire the missed scheduled job shortly after the studio wakes up
+[Service]
+Type=oneshot
+User=YOUR_OS_USER
+Environment=PATH=/home/YOUR_OS_USER/.cache/.bun/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/bin/bash -c 'MARKER="$HOME/.hermes/cache/YOURJOB-ran-$(date +%F)"; [ -f "$MARKER" ] && exit 0; for i in $(seq 1 20); do /path/to/hermes cron run YOUR_JOB_ID && exit 0; sleep 30; done; exit 1'
+[Install]
+WantedBy=multi-user.target

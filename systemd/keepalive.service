@@ -1,0 +1,6 @@
+[Unit]
+Description=Keepalive window check (script decides whether a loop runs)
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/keepalive
+User=YOUR_OS_USER
